@@ -50,7 +50,8 @@ def main() -> dict[str, float]:
 
     # 3. Split + train.
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )

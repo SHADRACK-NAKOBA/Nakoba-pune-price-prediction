@@ -83,7 +83,8 @@ def main() -> str:
 
     X, y = load_features_and_target()
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )
@@ -93,18 +94,20 @@ def main() -> str:
         model = train_voting_regressor(X_train, y_train, params)
 
         # 2. Log every hyperparameter that could affect the result.
-        mlflow.log_params({
-            "model_type": "VotingRegressor",
-            "estimators": "LinearRegression+Ridge+Lasso",
-            "ridge_alpha": params["ridge"]["alpha"],
-            "lasso_alpha": params["lasso"]["alpha"],
-            "lasso_max_iter": params["lasso"]["max_iter"],
-            "test_size": params["data"]["test_size"],
-            "random_state": params["data"]["random_state"],
-            "n_features": X_train.shape[1],
-            "n_train": len(X_train),
-            "n_test": len(X_test),
-        })
+        mlflow.log_params(
+            {
+                "model_type": "VotingRegressor",
+                "estimators": "LinearRegression+Ridge+Lasso",
+                "ridge_alpha": params["ridge"]["alpha"],
+                "lasso_alpha": params["lasso"]["alpha"],
+                "lasso_max_iter": params["lasso"]["max_iter"],
+                "test_size": params["data"]["test_size"],
+                "random_state": params["data"]["random_state"],
+                "n_features": X_train.shape[1],
+                "n_train": len(X_train),
+                "n_test": len(X_test),
+            }
+        )
 
         # 3. Score on test set + log all metrics.
         metrics = score_regressor(model, X_test, y_test)
@@ -120,16 +123,19 @@ def main() -> str:
         )
 
         # 5. Tags (free-form key/value, useful for filtering runs in the UI).
-        mlflow.set_tags({
-            "module": "M2_Lab5",
-            "dataset": "Pune Real Estate v1",
-            "candidate_for_registry": "true",
-        })
+        mlflow.set_tags(
+            {
+                "module": "M2_Lab5",
+                "dataset": "Pune Real Estate v1",
+                "candidate_for_registry": "true",
+            }
+        )
 
         # 6. Diagnostic plot as an artifact.
         with tempfile.TemporaryDirectory() as tmp:
-            plot_path = _make_diagnostic_plot(model, X_test, y_test,
-                                              Path(tmp) / "diagnostics.png")
+            plot_path = _make_diagnostic_plot(
+                model, X_test, y_test, Path(tmp) / "diagnostics.png"
+            )
             mlflow.log_artifact(str(plot_path), artifact_path="diagnostics")
 
         # 7. Log the model with a signature + sample input. The signature is
@@ -137,7 +143,7 @@ def main() -> str:
         signature = infer_signature(X_train, model.predict(X_train))
         mlflow.sklearn.log_model(
             sk_model=model,
-            name="model",                      # MLflow 3.x param (was artifact_path)
+            name="model",  # MLflow 3.x param (was artifact_path)
             signature=signature,
             input_example=X_train.iloc[:2],
         )
@@ -149,7 +155,9 @@ def main() -> str:
         run_id = run.info.run_id
         print()
         print(f"✅ Run logged: {run_id}")
-        print(f"   RMSE = ₹{metrics['rmse']:.2f}L | MAE = ₹{metrics['mae']:.2f}L | R² = {metrics['r2']:.4f}")
+        print(
+            f"   RMSE = ₹{metrics['rmse']:.2f}L | MAE = ₹{metrics['mae']:.2f}L | R² = {metrics['r2']:.4f}"
+        )
         print(f"   Model URI: runs:/{run_id}/model")
         return run_id
 

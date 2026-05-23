@@ -58,6 +58,7 @@ def _patch_pycaret_mlflow_compat() -> None:
 def _silence_noisy_loggers() -> None:
     # MLflow chats at WARNING with deprecation/safety notes on every model save.
     import logging
+
     logging.getLogger("mlflow").setLevel(logging.ERROR)
 
     # LightGBM emits "No further splits with positive gain" from the C++ side
@@ -66,8 +67,11 @@ def _silence_noisy_loggers() -> None:
         import lightgbm as lgb
 
         class _SilentLogger:
-            def info(self, msg): pass
-            def warning(self, msg): pass
+            def info(self, msg):
+                pass
+
+            def warning(self, msg):
+                pass
 
         lgb.register_logger(_SilentLogger())
     except ImportError:
@@ -79,9 +83,15 @@ def main() -> dict:
     # gets a clean error here, not at import time.
     try:
         from pycaret.regression import (  # noqa: F401
-            compare_models, finalize_model, predict_model, pull,
-            save_model, setup, tune_model,
+            compare_models,
+            finalize_model,
+            predict_model,
+            pull,
+            save_model,
+            setup,
+            tune_model,
         )
+
         _patch_pycaret_mlflow_compat()
         _silence_noisy_loggers()
     except ImportError as exc:
@@ -100,7 +110,8 @@ def main() -> dict:
     # 1. Load data + same split as Lab 3.
     X, y = load_features_and_target()
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )
@@ -120,7 +131,7 @@ def main() -> dict:
         normalize=True,
         verbose=True,
         html=False,
-        log_experiment=False,   # we run a separate MLflow script
+        log_experiment=False,  # we run a separate MLflow script
     )
 
     # 4. compare_models — train and rank ~20 algorithms by R².
@@ -133,7 +144,9 @@ def main() -> dict:
     # 5. Tune the winner.
     best = top_3[0] if isinstance(top_3, list) else top_3
     print(f"\n[3/5] tune_model({type(best).__name__}, n_iter=20)…")
-    tuned = tune_model(best, n_iter=20, optimize="R2", choose_better=True, verbose=False)
+    tuned = tune_model(
+        best, n_iter=20, optimize="R2", choose_better=True, verbose=False
+    )
 
     # 6. Finalize (refit on full training pool) and save the pipeline.
     print("[4/5] finalize_model() → refit on full training data")
@@ -145,11 +158,17 @@ def main() -> dict:
     # 7. Score PyCaret's final pipeline on Lab 3's test set.
     print("\n[5/5] Head-to-head on the Lab 3 test set")
     pycaret_pred_df = predict_model(final, data=X_test, verbose=False)
-    pred_col = "prediction_label" if "prediction_label" in pycaret_pred_df.columns else "Label"
+    pred_col = (
+        "prediction_label" if "prediction_label" in pycaret_pred_df.columns else "Label"
+    )
     pycaret_pred = pycaret_pred_df[pred_col].values
     pycaret_metrics = {
         "rmse": float(((y_test - pycaret_pred) ** 2).mean() ** 0.5),
-        "r2":   float(1 - ((y_test - pycaret_pred) ** 2).sum() / ((y_test - y_test.mean()) ** 2).sum()),
+        "r2": float(
+            1
+            - ((y_test - pycaret_pred) ** 2).sum()
+            / ((y_test - y_test.mean()) ** 2).sum()
+        ),
     }
 
     # 8. Score the EXISTING Lab 3 Voting Regressor on the SAME test set.
@@ -158,7 +177,9 @@ def main() -> dict:
         lab3_model = joblib.load(lab3_path)
         lab3_metrics = score_regressor(lab3_model, X_test, y_test)
     else:
-        print(f"⚠️  Lab 3 model not found at {lab3_path} — run `python -m mlops.train` first.")
+        print(
+            f"⚠️  Lab 3 model not found at {lab3_path} — run `python -m mlops.train` first."
+        )
         lab3_metrics = None
 
     # 9. Print + save the comparison.
@@ -167,10 +188,14 @@ def main() -> dict:
     print(f"│ {'Model':<30s}{'RMSE (₹L)':>13s}{'R²':>15s} │")
     print("├" + "─" * 60 + "┤")
     if lab3_metrics:
-        print(f"│ {'Lab 3 manual VotingRegressor':<30s}"
-              f"{lab3_metrics['rmse']:>13.2f}{lab3_metrics['r2']:>15.4f} │")
-    print(f"│ {'PyCaret final ' + type(final).__name__:<30s}"
-          f"{pycaret_metrics['rmse']:>13.2f}{pycaret_metrics['r2']:>15.4f} │")
+        print(
+            f"│ {'Lab 3 manual VotingRegressor':<30s}"
+            f"{lab3_metrics['rmse']:>13.2f}{lab3_metrics['r2']:>15.4f} │"
+        )
+    print(
+        f"│ {'PyCaret final ' + type(final).__name__:<30s}"
+        f"{pycaret_metrics['rmse']:>13.2f}{pycaret_metrics['r2']:>15.4f} │"
+    )
     print("└" + "─" * 60 + "┘")
 
     if lab3_metrics:
@@ -187,9 +212,9 @@ def main() -> dict:
     payload = {
         "pycaret_model": type(final).__name__,
         "pycaret_rmse": pycaret_metrics["rmse"],
-        "pycaret_r2":   pycaret_metrics["r2"],
-        "lab3_rmse":    lab3_metrics["rmse"] if lab3_metrics else None,
-        "lab3_r2":      lab3_metrics["r2"]   if lab3_metrics else None,
+        "pycaret_r2": pycaret_metrics["r2"],
+        "lab3_rmse": lab3_metrics["rmse"] if lab3_metrics else None,
+        "lab3_r2": lab3_metrics["r2"] if lab3_metrics else None,
     }
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
     out = METRICS_DIR / "pycaret_benchmark.json"

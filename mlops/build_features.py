@@ -37,28 +37,43 @@ import pandas as pd
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CLEAN_CSV    = PROJECT_ROOT / "data_cleaned.csv"
-MODEL_DIR    = PROJECT_ROOT / "model"
+CLEAN_CSV = PROJECT_ROOT / "data_cleaned.csv"
+MODEL_DIR = PROJECT_ROOT / "model"
 FEATURES_CSV = PROJECT_ROOT / "model_features.csv"
-TARGET_NPY   = PROJECT_ROOT / "model_target.npy"
+TARGET_NPY = PROJECT_ROOT / "model_target.npy"
 
 # ── Constants from Lab 2 ─────────────────────────────────────────────────────
 REPLACE_BY_SPACE = re.compile(r"[/(){}\[\]\|@,;!]")
-BAD_SYMBOLS      = re.compile(r"[^0-9a-z #+_]")
+BAD_SYMBOLS = re.compile(r"[^0-9a-z #+_]")
 
 AMENITY_COLS = [
-    "ClubHouse Cleaned", "School Cleaned", "Hospital Cleaned",
-    "Mall Cleaned", "Park Cleaned", "Pool Cleaned", "Gym Cleaned",
+    "ClubHouse Cleaned",
+    "School Cleaned",
+    "Hospital Cleaned",
+    "Mall Cleaned",
+    "Park Cleaned",
+    "Pool Cleaned",
+    "Gym Cleaned",
 ]
 
 # Order of structural+engineered features — MUST match Lab 2 §7 exactly,
 # because the trained Voting Regressor was fitted with this column order.
 STRUCTURAL_FEATURE_COLS = [
-    "Property Type Cleaned", "Area Cleaned",
-    "ClubHouse Cleaned", "School Cleaned", "Hospital Cleaned",
-    "Mall Cleaned", "Park Cleaned", "Pool Cleaned", "Gym Cleaned",
-    "Price by sub-area", "Amenities score", "Price by Amenities score",
-    "Noun_Counts", "Verb_Counts", "Adjective_Counts",
+    "Property Type Cleaned",
+    "Area Cleaned",
+    "ClubHouse Cleaned",
+    "School Cleaned",
+    "Hospital Cleaned",
+    "Mall Cleaned",
+    "Park Cleaned",
+    "Pool Cleaned",
+    "Gym Cleaned",
+    "Price by sub-area",
+    "Amenities score",
+    "Price by Amenities score",
+    "Noun_Counts",
+    "Verb_Counts",
+    "Adjective_Counts",
 ]
 
 
@@ -66,8 +81,14 @@ STRUCTURAL_FEATURE_COLS = [
 def _ensure_nltk():
     """Download the NLTK resources Lab 2 uses, idempotently."""
     import nltk
-    for pkg in ("punkt", "punkt_tab", "averaged_perceptron_tagger",
-                "averaged_perceptron_tagger_eng", "stopwords"):
+
+    for pkg in (
+        "punkt",
+        "punkt_tab",
+        "averaged_perceptron_tagger",
+        "averaged_perceptron_tagger_eng",
+        "stopwords",
+    ):
         nltk.download(pkg, quiet=True)
 
 
@@ -79,7 +100,9 @@ def _build_text_prepare_fn(stopwords_set: set):
         text = str(text).lower()
         text = REPLACE_BY_SPACE.sub(" ", text)
         text = BAD_SYMBOLS.sub("", text)
-        return " ".join(w for w in text.split() if w not in stopwords_set and len(w) > 2)
+        return " ".join(
+            w for w in text.split() if w not in stopwords_set and len(w) > 2
+        )
 
     return text_prepare
 
@@ -95,7 +118,7 @@ def _extract_pos_counts(text: str) -> tuple[int, int, int]:
     tagged = pos_tag(word_tokenize(str(text)))
     nouns = sum(1 for _, t in tagged if t in ("NN", "NNS", "NNP"))
     verbs = sum(1 for _, t in tagged if t.startswith("VB"))
-    adjs  = sum(1 for _, t in tagged if t in ("JJ", "JJR", "JJS"))
+    adjs = sum(1 for _, t in tagged if t in ("JJ", "JJR", "JJS"))
     return nouns, verbs, adjs
 
 
@@ -117,6 +140,7 @@ def main() -> dict[str, Path]:
     print("\n[1/6] Loading NLTK resources")
     _ensure_nltk()
     from nltk.corpus import stopwords
+
     stop_words = set(stopwords.words("english"))
 
     # 2. Load cleaned data.
@@ -130,19 +154,20 @@ def main() -> dict[str, Path]:
     df["Description Processed"] = df["Description Cleaned"].apply(text_prepare)
 
     pos = df["Description Processed"].apply(_extract_pos_counts)
-    df["Noun_Counts"]      = pos.apply(lambda x: x[0])
-    df["Verb_Counts"]      = pos.apply(lambda x: x[1])
+    df["Noun_Counts"] = pos.apply(lambda x: x[0])
+    df["Verb_Counts"] = pos.apply(lambda x: x[1])
     df["Adjective_Counts"] = pos.apply(lambda x: x[2])
 
     # 4. CountVectorizer — top 10 bigrams (Lab 2 §5).
     print("[4/6] Fitting CountVectorizer (bigrams, top 10) on descriptions")
     from sklearn.feature_extraction.text import CountVectorizer
+
     cv = CountVectorizer(ngram_range=(2, 2), max_features=10, stop_words="english")
     cv.fit(df["Description Processed"])
     text_matrix = cv.transform(df["Description Processed"])
-    text_df = pd.DataFrame(text_matrix.toarray(),
-                           columns=cv.get_feature_names_out(),
-                           index=df.index)
+    text_df = pd.DataFrame(
+        text_matrix.toarray(), columns=cv.get_feature_names_out(), index=df.index
+    )
     print(f"      Bigrams selected: {cv.get_feature_names_out().tolist()}")
 
     with open(MODEL_DIR / "count_vectorizer.pkl", "wb") as fh:
@@ -150,11 +175,15 @@ def main() -> dict[str, Path]:
 
     # 5. Target encoding — sub-area mean price + amenities score (Lab 2 §6).
     print("[5/6] Target-encoding sub-area and amenities score")
-    sub_area_price_map = df.groupby("Sub-Area Cleaned")["Price Cleaned"].mean().to_dict()
+    sub_area_price_map = (
+        df.groupby("Sub-Area Cleaned")["Price Cleaned"].mean().to_dict()
+    )
     df["Price by sub-area"] = df["Sub-Area Cleaned"].map(sub_area_price_map)
 
     df["Amenities score"] = df[AMENITY_COLS].sum(axis=1)
-    amenities_price_map = df.groupby("Amenities score")["Price Cleaned"].mean().to_dict()
+    amenities_price_map = (
+        df.groupby("Amenities score")["Price Cleaned"].mean().to_dict()
+    )
     df["Price by Amenities score"] = df["Amenities score"].map(amenities_price_map)
 
     with open(MODEL_DIR / "sub_area_price_map.pkl", "wb") as fh:
@@ -180,20 +209,24 @@ def main() -> dict[str, Path]:
         pickle.dump(X_combined.columns.tolist(), fh)
 
     paths = {
-        "features":             FEATURES_CSV,
-        "target":               TARGET_NPY,
-        "count_vectorizer":     MODEL_DIR / "count_vectorizer.pkl",
-        "sub_area_price_map":   MODEL_DIR / "sub_area_price_map.pkl",
-        "amenities_price_map":  MODEL_DIR / "amenities_score_price_map.pkl",
-        "feature_cols":         MODEL_DIR / "feature_cols.pkl",
-        "all_feature_names":    MODEL_DIR / "all_feature_names.pkl",
+        "features": FEATURES_CSV,
+        "target": TARGET_NPY,
+        "count_vectorizer": MODEL_DIR / "count_vectorizer.pkl",
+        "sub_area_price_map": MODEL_DIR / "sub_area_price_map.pkl",
+        "amenities_price_map": MODEL_DIR / "amenities_score_price_map.pkl",
+        "feature_cols": MODEL_DIR / "feature_cols.pkl",
+        "all_feature_names": MODEL_DIR / "all_feature_names.pkl",
     }
 
-    print(f"\n✅ Feature matrix: {X_combined.shape[0]} rows × {X_combined.shape[1]} features")
+    print(
+        f"\n✅ Feature matrix: {X_combined.shape[0]} rows × {X_combined.shape[1]} features"
+    )
     print("   Artifacts written:")
     for name, p in paths.items():
         size_kb = p.stat().st_size / 1024
-        print(f"      {p.relative_to(PROJECT_ROOT).as_posix():<45s} ({size_kb:>5.1f} KB)")
+        print(
+            f"      {p.relative_to(PROJECT_ROOT).as_posix():<45s} ({size_kb:>5.1f} KB)"
+        )
 
     return paths
 

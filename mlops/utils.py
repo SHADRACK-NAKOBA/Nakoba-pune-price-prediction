@@ -94,7 +94,9 @@ def split_data(
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
-def score_regressor(model, X_eval: pd.DataFrame, y_eval: np.ndarray) -> dict[str, float]:
+def score_regressor(
+    model, X_eval: pd.DataFrame, y_eval: np.ndarray
+) -> dict[str, float]:
     """Compute RMSE, MAE, R² on the eval set. Returns plain floats so the
     dict can be JSON-serialized for DVC metrics or MLflow logging."""
     pred = model.predict(X_eval)
@@ -106,7 +108,9 @@ def score_regressor(model, X_eval: pd.DataFrame, y_eval: np.ndarray) -> dict[str
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
-def build_voting_regressor(ridge_alpha: float, lasso_alpha: float, lasso_max_iter: int = 10_000):
+def build_voting_regressor(
+    ridge_alpha: float, lasso_alpha: float, lasso_max_iter: int = 10_000
+):
     """Construct the Lab-3 Voting Regressor (LR + Ridge + Lasso).
 
     This is the exact estimator that Lab 3 trained and that src/inference.py
@@ -149,7 +153,9 @@ def compute_interval_estimate(
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
-def save_model_artifacts(model, interval_est: dict, model_dir: Path = MODEL_DIR) -> dict[str, Path]:
+def save_model_artifacts(
+    model, interval_est: dict, model_dir: Path = MODEL_DIR
+) -> dict[str, Path]:
     """Persist the trained model + interval to disk.
 
     Note: we save into the SAME filenames that src/inference.py loads. That

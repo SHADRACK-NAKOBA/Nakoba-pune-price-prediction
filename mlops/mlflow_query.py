@@ -32,19 +32,32 @@ def main() -> pd.DataFrame:
     exp = mlflow.get_experiment_by_name(params["mlflow"]["experiment_name"])
     if exp is None:
         print(f"❌ Experiment '{params['mlflow']['experiment_name']}' not found.")
-        print("   Run `python -m mlops.mlflow_train` or `python -m mlops.mlflow_sweep` first.")
+        print(
+            "   Run `python -m mlops.mlflow_train` or `python -m mlops.mlflow_sweep` first."
+        )
         return pd.DataFrame()
 
-    runs = mlflow.search_runs(experiment_ids=[exp.experiment_id], order_by=["metrics.r2 DESC"])
+    runs = mlflow.search_runs(
+        experiment_ids=[exp.experiment_id], order_by=["metrics.r2 DESC"]
+    )
     if runs.empty:
         print("⚠️  Experiment exists but has no runs yet.")
         return runs
 
     # ── Top-level leaderboard ───────────────────────────────────────────────
-    cols = [c for c in (
-        "tags.mlflow.runName", "params.model_type", "params.ridge_alpha",
-        "params.lasso_alpha", "metrics.rmse", "metrics.r2", "run_id"
-    ) if c in runs.columns]
+    cols = [
+        c
+        for c in (
+            "tags.mlflow.runName",
+            "params.model_type",
+            "params.ridge_alpha",
+            "params.lasso_alpha",
+            "metrics.rmse",
+            "metrics.r2",
+            "run_id",
+        )
+        if c in runs.columns
+    ]
     print("\n=== Leaderboard (top 10 by R²) ===")
     print(runs[cols].head(10).to_string(index=False))
 
@@ -66,8 +79,14 @@ def main() -> pd.DataFrame:
         METRICS_DIR.mkdir(parents=True, exist_ok=True)
         plot_path = METRICS_DIR / "ridge_sweep.png"
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(sweep["alpha"], sweep["metrics.r2"], "o-", color="#2563eb",
-                lw=2, markersize=10)
+        ax.plot(
+            sweep["alpha"],
+            sweep["metrics.r2"],
+            "o-",
+            color="#2563eb",
+            lw=2,
+            markersize=10,
+        )
         ax.set_xscale("log")
         ax.set_xlabel("Ridge α (log scale)")
         ax.set_ylabel("Test R²")

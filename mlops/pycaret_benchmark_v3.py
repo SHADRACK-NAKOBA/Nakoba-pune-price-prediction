@@ -164,6 +164,7 @@ def _patch_pycaret_mlflow_compat() -> None:
 def _silence_noisy_loggers() -> None:
     # MLflow chats at WARNING with deprecation/safety notes on every model save.
     import logging
+
     logging.getLogger("mlflow").setLevel(logging.ERROR)
 
     # LightGBM emits "No further splits with positive gain" from the C++ side
@@ -172,8 +173,11 @@ def _silence_noisy_loggers() -> None:
         import lightgbm as lgb
 
         class _SilentLogger:
-            def info(self, msg): pass
-            def warning(self, msg): pass
+            def info(self, msg):
+                pass
+
+            def warning(self, msg):
+                pass
 
         lgb.register_logger(_SilentLogger())
     except ImportError:
@@ -186,9 +190,15 @@ def main() -> dict:
     # gets a clean error here, not at import time.
     try:
         from pycaret.regression import (  # noqa: F401
-            compare_models, finalize_model, predict_model, pull,
-            save_model, setup, tune_model,
+            compare_models,
+            finalize_model,
+            predict_model,
+            pull,
+            save_model,
+            setup,
+            tune_model,
         )
+
         _patch_pycaret_mlflow_compat()
         _silence_noisy_loggers()
     except ImportError as exc:
@@ -204,6 +214,7 @@ def main() -> dict:
     # sqlite:///mlflow.db` alongside mlflow_train.py runs.
     import os
     import mlflow
+
     if "MLFLOW_TRACKING_URI" not in os.environ:
         mlflow.set_tracking_uri(f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}")
     print(f"MLflow tracking URI : {mlflow.get_tracking_uri()}")
@@ -217,12 +228,15 @@ def main() -> dict:
     # 1. Load data + same split as Lab 3.
     X, y = load_features_and_target()
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )
-    print(f"\nLoaded data: train = {len(X_train)}, test = {len(X_test)}, "
-          f"full = {len(X)}")
+    print(
+        f"\nLoaded data: train = {len(X_train)}, test = {len(X_test)}, "
+        f"full = {len(X)}"
+    )
 
     # 2. PyCaret needs a single dataframe with the target as a column.
     train_df = X_train.copy()
@@ -253,7 +267,9 @@ def main() -> dict:
     # 5. Tune the winner.
     best = top_n[0] if isinstance(top_n, list) else top_n
     print(f"\n[3/6] tune_model({type(best).__name__}, n_iter=20)…")
-    tuned = tune_model(best, n_iter=20, optimize="R2", choose_better=True, verbose=False)
+    tuned = tune_model(
+        best, n_iter=20, optimize="R2", choose_better=True, verbose=False
+    )
 
     # 6. Finalize on the training pool (this is the model we SCORE).
     print("[4/6] finalize_model() → refit on full training pool (159 rows)")
@@ -265,41 +281,55 @@ def main() -> dict:
     # 7. Score on BOTH train and test sets — the v2 diagnostic.
     print("\n[5/6] Head-to-head — train vs test on the Lab 3 splits")
     pred_col_cache: list[str] = []
-    pycaret_train = _score_pycaret_pipeline(predict_model, scored_model, X_train, y_train, pred_col_cache)
-    pycaret_test  = _score_pycaret_pipeline(predict_model, scored_model, X_test,  y_test,  pred_col_cache)
+    pycaret_train = _score_pycaret_pipeline(
+        predict_model, scored_model, X_train, y_train, pred_col_cache
+    )
+    pycaret_test = _score_pycaret_pipeline(
+        predict_model, scored_model, X_test, y_test, pred_col_cache
+    )
 
     chosen_name = leaderboard.iloc[0]["Model"]
     pycaret_cv_r2 = float(leaderboard.iloc[0]["R2"])
-    print(f"\n   CV mean R² for '{chosen_name}' (from compare_models): {pycaret_cv_r2:.4f}")
+    print(
+        f"\n   CV mean R² for '{chosen_name}' (from compare_models): {pycaret_cv_r2:.4f}"
+    )
 
     # 8. Score the EXISTING Lab 3 Voting Regressor on the SAME splits.
     lab3_path = MODEL_DIR / "property_price_prediction_voting.sav"
     if lab3_path.exists():
         lab3_model = joblib.load(lab3_path)
         lab3_train = score_regressor(lab3_model, X_train, y_train)
-        lab3_test  = score_regressor(lab3_model, X_test,  y_test)
+        lab3_test = score_regressor(lab3_model, X_test, y_test)
     else:
-        print(f"⚠️  Lab 3 model not found at {lab3_path} — run `python -m mlops.train` first.")
+        print(
+            f"⚠️  Lab 3 model not found at {lab3_path} — run `python -m mlops.train` first."
+        )
         lab3_train = None
-        lab3_test  = None
+        lab3_test = None
 
     # 9. Print the head-to-head table with the overfitting verdict.
     print()
     print("┌" + "─" * 78 + "┐")
-    print(f"│ {'Model':<32s}{'Train R²':>11s}{'Test R²':>11s}"
-          f"{'Train−Test':>13s}{'Verdict':>10s} │")
+    print(
+        f"│ {'Model':<32s}{'Train R²':>11s}{'Test R²':>11s}"
+        f"{'Train−Test':>13s}{'Verdict':>10s} │"
+    )
     print("├" + "─" * 78 + "┤")
 
     if lab3_train and lab3_test:
         gap = lab3_train["r2"] - lab3_test["r2"]
-        print(f"│ {'Lab 3 manual VotingRegressor':<32s}"
-              f"{lab3_train['r2']:>11.4f}{lab3_test['r2']:>11.4f}"
-              f"{gap:>+13.4f}{_verdict(gap):>10s} │")
+        print(
+            f"│ {'Lab 3 manual VotingRegressor':<32s}"
+            f"{lab3_train['r2']:>11.4f}{lab3_test['r2']:>11.4f}"
+            f"{gap:>+13.4f}{_verdict(gap):>10s} │"
+        )
 
     pyc_gap = pycaret_train["r2"] - pycaret_test["r2"]
-    print(f"│ {'PyCaret ' + type(scored_model).__name__:<32s}"
-          f"{pycaret_train['r2']:>11.4f}{pycaret_test['r2']:>11.4f}"
-          f"{pyc_gap:>+13.4f}{_verdict(pyc_gap):>10s} │")
+    print(
+        f"│ {'PyCaret ' + type(scored_model).__name__:<32s}"
+        f"{pycaret_train['r2']:>11.4f}{pycaret_test['r2']:>11.4f}"
+        f"{pyc_gap:>+13.4f}{_verdict(pyc_gap):>10s} │"
+    )
     print("└" + "─" * 78 + "┘")
 
     # RMSE table.
@@ -308,10 +338,14 @@ def main() -> dict:
     print(f"│ {'Model':<30s}{'Train RMSE':>13s}{'Test RMSE':>15s} │")
     print("├" + "─" * 60 + "┤")
     if lab3_train and lab3_test:
-        print(f"│ {'Lab 3 manual VotingRegressor':<30s}"
-              f"{lab3_train['rmse']:>13.2f}{lab3_test['rmse']:>15.2f} │")
-    print(f"│ {'PyCaret ' + type(scored_model).__name__:<30s}"
-          f"{pycaret_train['rmse']:>13.2f}{pycaret_test['rmse']:>15.2f} │")
+        print(
+            f"│ {'Lab 3 manual VotingRegressor':<30s}"
+            f"{lab3_train['rmse']:>13.2f}{lab3_test['rmse']:>15.2f} │"
+        )
+    print(
+        f"│ {'PyCaret ' + type(scored_model).__name__:<30s}"
+        f"{pycaret_train['rmse']:>13.2f}{pycaret_test['rmse']:>15.2f} │"
+    )
     print("└" + "─" * 60 + "┘")
 
     # 10. Verdict prose with overfitting honesty.
@@ -326,11 +360,15 @@ def main() -> dict:
         print(f"\n   Verdict (test R² only): {verdict}")
 
         if delta > 0 and pyc_gap >= 0.10:
-            print(f"   ⚠️  But PyCaret's train-test gap is {pyc_gap:+.4f} — "
-                  f"some of that test win may be overfitting noise.")
+            print(
+                f"   ⚠️  But PyCaret's train-test gap is {pyc_gap:+.4f} — "
+                f"some of that test win may be overfitting noise."
+            )
         elif delta > 0 and 0.05 <= pyc_gap < 0.10:
-            print(f"   ⚠️  PyCaret's train-test gap is {pyc_gap:+.4f} — "
-                  f"watch for overfitting on a different test split.")
+            print(
+                f"   ⚠️  PyCaret's train-test gap is {pyc_gap:+.4f} — "
+                f"watch for overfitting on a different test split."
+            )
 
     # ─── 11. v3 ADDITION: deployment refit on the FULL dataset ───────────────
     #
@@ -373,44 +411,46 @@ def main() -> dict:
     deployment_path = MODEL_DIR / "pycaret_pune_real_estate_DEPLOY"
     save_model(deployment_model, str(deployment_path))
     print(f"       Saved (deployment): {deployment_path}.pkl")
-    print(f"       Expected production R² ≈ {pycaret_test['r2']:.4f} "
-          f"(from step 5; deployed model is fit on more data so likely slightly better)")
+    print(
+        f"       Expected production R² ≈ {pycaret_test['r2']:.4f} "
+        f"(from step 5; deployed model is fit on more data so likely slightly better)"
+    )
 
     # 12. Persist comparison metrics for DVC.
     payload = {
         # ── PyCaret diagnostics (v2 + v3) ────────────────────────────────
-        "pycaret_model":              type(scored_model).__name__,
-        "pycaret_train_r2":           pycaret_train["r2"],
-        "pycaret_cv_r2":              pycaret_cv_r2,
-        "pycaret_test_r2":            pycaret_test["r2"],
-        "pycaret_train_test_gap":     pyc_gap,
-        "pycaret_overfit_verdict":    _verdict(pyc_gap),
-        "pycaret_train_rmse":         pycaret_train["rmse"],
-        "pycaret_test_rmse":          pycaret_test["rmse"],
-
+        "pycaret_model": type(scored_model).__name__,
+        "pycaret_train_r2": pycaret_train["r2"],
+        "pycaret_cv_r2": pycaret_cv_r2,
+        "pycaret_test_r2": pycaret_test["r2"],
+        "pycaret_train_test_gap": pyc_gap,
+        "pycaret_overfit_verdict": _verdict(pyc_gap),
+        "pycaret_train_rmse": pycaret_train["rmse"],
+        "pycaret_test_rmse": pycaret_test["rmse"],
         # ── v3: artifact paths ───────────────────────────────────────────
-        "pycaret_scored_artifact":    f"{scored_path}.pkl",
-        "pycaret_deploy_artifact":    f"{deployment_path}.pkl",
-        "pycaret_n_train_scored":     len(X_train),
-        "pycaret_n_train_deployed":   len(X),
-
+        "pycaret_scored_artifact": f"{scored_path}.pkl",
+        "pycaret_deploy_artifact": f"{deployment_path}.pkl",
+        "pycaret_n_train_scored": len(X_train),
+        "pycaret_n_train_deployed": len(X),
         # ── Back-compat aliases (v1 schema) ──────────────────────────────
-        "pycaret_rmse":               pycaret_test["rmse"],
-        "pycaret_r2":                 pycaret_test["r2"],
-
+        "pycaret_rmse": pycaret_test["rmse"],
+        "pycaret_r2": pycaret_test["r2"],
         # ── Lab 3 diagnostics (v2) ───────────────────────────────────────
-        "lab3_train_r2":              lab3_train["r2"]   if lab3_train else None,
-        "lab3_test_r2":               lab3_test["r2"]    if lab3_test  else None,
-        "lab3_train_test_gap":        (lab3_train["r2"] - lab3_test["r2"])
-                                       if (lab3_train and lab3_test) else None,
-        "lab3_overfit_verdict":       _verdict(lab3_train["r2"] - lab3_test["r2"])
-                                       if (lab3_train and lab3_test) else None,
-        "lab3_train_rmse":            lab3_train["rmse"] if lab3_train else None,
-        "lab3_test_rmse":             lab3_test["rmse"]  if lab3_test  else None,
-
+        "lab3_train_r2": lab3_train["r2"] if lab3_train else None,
+        "lab3_test_r2": lab3_test["r2"] if lab3_test else None,
+        "lab3_train_test_gap": (
+            (lab3_train["r2"] - lab3_test["r2"]) if (lab3_train and lab3_test) else None
+        ),
+        "lab3_overfit_verdict": (
+            _verdict(lab3_train["r2"] - lab3_test["r2"])
+            if (lab3_train and lab3_test)
+            else None
+        ),
+        "lab3_train_rmse": lab3_train["rmse"] if lab3_train else None,
+        "lab3_test_rmse": lab3_test["rmse"] if lab3_test else None,
         # ── Back-compat aliases (v1 schema) ──────────────────────────────
-        "lab3_rmse":                  lab3_test["rmse"]  if lab3_test  else None,
-        "lab3_r2":                    lab3_test["r2"]    if lab3_test  else None,
+        "lab3_rmse": lab3_test["rmse"] if lab3_test else None,
+        "lab3_r2": lab3_test["r2"] if lab3_test else None,
     }
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
     out = METRICS_DIR / "pycaret_benchmark.json"
@@ -421,14 +461,22 @@ def main() -> dict:
     print("\n" + "=" * 70)
     print(" Summary")
     print("=" * 70)
-    print(f"   Audit model       : {scored_path.name}.pkl  "
-          f"(fit on {len(X_train)} rows, scored on {len(X_test)})")
-    print(f"   Deployment model  : {deployment_path.name}.pkl  "
-          f"(fit on {len(X)} rows, NOT scored)")
-    print(f"   Reported test R²  : {pycaret_test['r2']:.4f}  ← what to put on the slide")
+    print(
+        f"   Audit model       : {scored_path.name}.pkl  "
+        f"(fit on {len(X_train)} rows, scored on {len(X_test)})"
+    )
+    print(
+        f"   Deployment model  : {deployment_path.name}.pkl  "
+        f"(fit on {len(X)} rows, NOT scored)"
+    )
+    print(
+        f"   Reported test R²  : {pycaret_test['r2']:.4f}  ← what to put on the slide"
+    )
     print(f"   Train-test gap    : {pyc_gap:+.4f}  ({_verdict(pyc_gap)})")
     print()
-    print("   To deploy: point src/inference.py at the DEPLOY .pkl and restart FastAPI.")
+    print(
+        "   To deploy: point src/inference.py at the DEPLOY .pkl and restart FastAPI."
+    )
     return payload
 
 

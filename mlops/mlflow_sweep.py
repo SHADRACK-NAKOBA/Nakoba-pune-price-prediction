@@ -41,7 +41,8 @@ def main() -> list[dict]:
 
     X, y = load_features_and_target()
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )
@@ -61,12 +62,14 @@ def main() -> list[dict]:
             model.fit(X_train, y_train)
             metrics = score_regressor(model, X_test, y_test)
 
-            mlflow.log_params({
-                "model_type": "VotingRegressor",
-                "ridge_alpha": alpha,
-                "lasso_alpha": lasso_alpha,
-                "n_features": X_train.shape[1],
-            })
+            mlflow.log_params(
+                {
+                    "model_type": "VotingRegressor",
+                    "ridge_alpha": alpha,
+                    "lasso_alpha": lasso_alpha,
+                    "n_features": X_train.shape[1],
+                }
+            )
             mlflow.log_metrics(metrics)
             mlflow.set_tags({"module": "M2_Lab5", "sweep": "ridge_alpha"})
 
@@ -75,8 +78,10 @@ def main() -> list[dict]:
 
             row = {"alpha": alpha, **metrics, "run_id": run.info.run_id}
             results.append(row)
-            print(f"  α={alpha:<8}  RMSE = ₹{metrics['rmse']:6.2f}L   "
-                  f"R² = {metrics['r2']:.4f}   run = {run.info.run_id[:8]}")
+            print(
+                f"  α={alpha:<8}  RMSE = ₹{metrics['rmse']:6.2f}L   "
+                f"R² = {metrics['r2']:.4f}   run = {run.info.run_id[:8]}"
+            )
 
     # Best by R²
     best = max(results, key=lambda r: r["r2"])

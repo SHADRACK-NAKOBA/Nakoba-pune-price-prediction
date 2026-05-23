@@ -13,6 +13,7 @@ Each module is runnable standalone from the project root:
 # throughout these scripts. Reconfiguring here covers every `python -m mlops.x`
 # entry point in one place.
 import sys
+
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")

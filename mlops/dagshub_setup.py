@@ -31,9 +31,9 @@ from typing import Optional
 def _read_env() -> dict[str, Optional[str]]:
     """Pull DagsHub credentials from the environment. None if unset."""
     return {
-        "user":  os.environ.get("DAGSHUB_USER"),
+        "user": os.environ.get("DAGSHUB_USER"),
         "token": os.environ.get("DAGSHUB_TOKEN"),
-        "repo":  os.environ.get("DAGSHUB_REPO"),
+        "repo": os.environ.get("DAGSHUB_REPO"),
     }
 
 
@@ -70,7 +70,9 @@ def configure_mlflow() -> Optional[str]:
     """
     env = _read_env()
     if not (env["user"] and env["token"] and env["repo"]):
-        print("❌ Cannot configure — run `python -m mlops.dagshub_setup --check` first.")
+        print(
+            "❌ Cannot configure — run `python -m mlops.dagshub_setup --check` first."
+        )
         return None
 
     uri = f"https://dagshub.com/{env['user']}/{env['repo']}.mlflow"
@@ -118,11 +120,19 @@ def print_dvc_commands() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--check", action="store_true", help="Show which env vars are set")
-    parser.add_argument("--configure", action="store_true",
-                        help="Set MLflow env vars in the current Python process")
-    parser.add_argument("--print-dvc-cmds", action="store_true",
-                        help="Print the dvc commands needed for the DagsHub remote")
+    parser.add_argument(
+        "--check", action="store_true", help="Show which env vars are set"
+    )
+    parser.add_argument(
+        "--configure",
+        action="store_true",
+        help="Set MLflow env vars in the current Python process",
+    )
+    parser.add_argument(
+        "--print-dvc-cmds",
+        action="store_true",
+        help="Print the dvc commands needed for the DagsHub remote",
+    )
     args = parser.parse_args()
 
     if not any((args.check, args.configure, args.print_dvc_cmds)):

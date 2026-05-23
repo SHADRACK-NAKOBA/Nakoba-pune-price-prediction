@@ -122,7 +122,8 @@ def main() -> str:
 
     X, y = load_features_and_target()
     X_train, X_test, y_train, y_test = split_data(
-        X, y,
+        X,
+        y,
         test_size=params["data"]["test_size"],
         random_state=params["data"]["random_state"],
     )
@@ -132,39 +133,43 @@ def main() -> str:
         model = train_voting_regressor(X_train, y_train, params)
 
         # 2. Hyperparameters + run metadata.
-        mlflow.log_params({
-            "model_type":     "VotingRegressor",
-            "estimators":     "LinearRegression+Ridge+Lasso",
-            "ridge_alpha":    params["ridge"]["alpha"],
-            "lasso_alpha":    params["lasso"]["alpha"],
-            "lasso_max_iter": params["lasso"]["max_iter"],
-            "test_size":      params["data"]["test_size"],
-            "random_state":   params["data"]["random_state"],
-            "n_features":     X_train.shape[1],
-            "n_train":        len(X_train),
-            "n_test":         len(X_test),
-        })
+        mlflow.log_params(
+            {
+                "model_type": "VotingRegressor",
+                "estimators": "LinearRegression+Ridge+Lasso",
+                "ridge_alpha": params["ridge"]["alpha"],
+                "lasso_alpha": params["lasso"]["alpha"],
+                "lasso_max_iter": params["lasso"]["max_iter"],
+                "test_size": params["data"]["test_size"],
+                "random_state": params["data"]["random_state"],
+                "n_features": X_train.shape[1],
+                "n_train": len(X_train),
+                "n_test": len(X_test),
+            }
+        )
 
         # 3. Score on TRAIN and TEST (v2 addition).
         train_metrics = score_regressor(model, X_train, y_train)
-        test_metrics  = score_regressor(model, X_test,  y_test)
+        test_metrics = score_regressor(model, X_test, y_test)
         gap = train_metrics["r2"] - test_metrics["r2"]
         verdict = _verdict(gap)
 
         # Log every metric with a clear prefix so the MLflow UI groups them.
-        mlflow.log_metrics({
-            "train_rmse":         train_metrics["rmse"],
-            "train_mae":          train_metrics["mae"],
-            "train_r2":           train_metrics["r2"],
-            "test_rmse":          test_metrics["rmse"],
-            "test_mae":           test_metrics["mae"],
-            "test_r2":            test_metrics["r2"],
-            "train_test_r2_gap":  gap,
-            # Back-compat aliases — v1 logged these names; preserve for old queries.
-            "rmse":               test_metrics["rmse"],
-            "mae":                test_metrics["mae"],
-            "r2":                 test_metrics["r2"],
-        })
+        mlflow.log_metrics(
+            {
+                "train_rmse": train_metrics["rmse"],
+                "train_mae": train_metrics["mae"],
+                "train_r2": train_metrics["r2"],
+                "test_rmse": test_metrics["rmse"],
+                "test_mae": test_metrics["mae"],
+                "test_r2": test_metrics["r2"],
+                "train_test_r2_gap": gap,
+                # Back-compat aliases — v1 logged these names; preserve for old queries.
+                "rmse": test_metrics["rmse"],
+                "mae": test_metrics["mae"],
+                "r2": test_metrics["r2"],
+            }
+        )
 
         # 4. Prediction interval (unchanged from v1).
         train_pred = model.predict(X_train)
@@ -176,17 +181,20 @@ def main() -> str:
         )
 
         # 5. Tags — including the v2 verdict so you can filter by it in the UI.
-        mlflow.set_tags({
-            "module":                  "M2_Lab5",
-            "dataset":                 "Pune Real Estate v1",
-            "candidate_for_registry":  "true",
-            "overfit_verdict":         verdict,
-        })
+        mlflow.set_tags(
+            {
+                "module": "M2_Lab5",
+                "dataset": "Pune Real Estate v1",
+                "candidate_for_registry": "true",
+                "overfit_verdict": verdict,
+            }
+        )
 
         # 6. Diagnostic plot.
         with tempfile.TemporaryDirectory() as tmp:
-            plot_path = _make_diagnostic_plot(model, X_test, y_test,
-                                              Path(tmp) / "diagnostics.png")
+            plot_path = _make_diagnostic_plot(
+                model, X_test, y_test, Path(tmp) / "diagnostics.png"
+            )
             mlflow.log_artifact(str(plot_path), artifact_path="diagnostics")
 
         # 7. Log AND register the model. `registered_model_name` is the v2
@@ -208,17 +216,25 @@ def main() -> str:
         run_id = run.info.run_id
         print()
         print(f"✅ Run logged: {run_id}")
-        print(f"   Train R²: {train_metrics['r2']:.4f}  |  "
-              f"Test R²: {test_metrics['r2']:.4f}  |  "
-              f"Gap: {gap:+.4f}  ({verdict})")
-        print(f"   Test RMSE: ₹{test_metrics['rmse']:.2f}L  |  "
-              f"Test MAE: ₹{test_metrics['mae']:.2f}L")
+        print(
+            f"   Train R²: {train_metrics['r2']:.4f}  |  "
+            f"Test R²: {test_metrics['r2']:.4f}  |  "
+            f"Gap: {gap:+.4f}  ({verdict})"
+        )
+        print(
+            f"   Test RMSE: ₹{test_metrics['rmse']:.2f}L  |  "
+            f"Test MAE: ₹{test_metrics['mae']:.2f}L"
+        )
         print(f"   Model URI:   runs:/{run_id}/model")
         print(f"   Registry:    models:/{REGISTERED_MODEL_NAME}/<latest version>")
         print()
         print("   To promote this run to Production:")
-        print(f"     1. mlflow ui --backend-store-uri sqlite:///{(PROJECT_ROOT / 'mlflow.db').name}")
-        print(f"     2. Models tab → {REGISTERED_MODEL_NAME} → set stage to 'Production'")
+        print(
+            f"     1. mlflow ui --backend-store-uri sqlite:///{(PROJECT_ROOT / 'mlflow.db').name}"
+        )
+        print(
+            f"     2. Models tab → {REGISTERED_MODEL_NAME} → set stage to 'Production'"
+        )
         return run_id
 
 

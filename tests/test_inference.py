@@ -24,8 +24,12 @@ class TestGetPredictionInterval:
         assert upper == pytest.approx(50.0)
 
     def test_wider_std_widens_interval(self):
-        _, upper_narrow = inference.get_prediction_interval(50.0, {"z_score": 1.96, "residual_std": 5.0})
-        _, upper_wide   = inference.get_prediction_interval(50.0, {"z_score": 1.96, "residual_std": 20.0})
+        _, upper_narrow = inference.get_prediction_interval(
+            50.0, {"z_score": 1.96, "residual_std": 5.0}
+        )
+        _, upper_wide = inference.get_prediction_interval(
+            50.0, {"z_score": 1.96, "residual_std": 20.0}
+        )
         assert upper_wide > upper_narrow
 
     def test_higher_prediction_shifts_interval_up(self):
@@ -38,7 +42,12 @@ class TestGetPredictionInterval:
 class TestPredictPrice:
     def test_returns_all_expected_keys(self, sample_property):
         result = inference.predict_price(sample_property)
-        assert {"predicted_price", "lower_bound", "upper_bound", "features_used"} <= result.keys()
+        assert {
+            "predicted_price",
+            "lower_bound",
+            "upper_bound",
+            "features_used",
+        } <= result.keys()
 
     def test_lower_bound_non_negative(self, sample_property):
         result = inference.predict_price(sample_property)
@@ -100,9 +109,9 @@ class TestPredictPrice:
 class TestGetModelInfo:
     def test_returns_all_required_keys(self):
         info = inference.get_model_info()
-        assert "model_type"           in info
+        assert "model_type" in info
         assert "vectorizer_vocab_size" in info
-        assert "interval_margin"      in info
+        assert "interval_margin" in info
 
     def test_vocab_size_positive_integer(self):
         info = inference.get_model_info()

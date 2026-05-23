@@ -51,7 +51,9 @@ LOCAL_REMOTE_PATH = PROJECT_ROOT / "dvc_remote"
 def _run(cmd: list[str], check: bool = True, cwd: Path = PROJECT_ROOT):
     """Wrapper around subprocess.run that prints what it ran."""
     print(f"  $ {' '.join(cmd)}")
-    return subprocess.run(cmd, cwd=str(cwd), check=check, capture_output=True, text=True)
+    return subprocess.run(
+        cmd, cwd=str(cwd), check=check, capture_output=True, text=True
+    )
 
 
 def _git_repo_exists() -> bool:
@@ -71,7 +73,7 @@ def init_git_if_missing() -> None:
     print("[1/4] No Git repo — initializing one")
     _run(["git", "init", "-q"])
     _run(["git", "config", "user.email", "lab@example.com"])
-    _run(["git", "config", "user.name",  "Lab Student"])
+    _run(["git", "config", "user.name", "Lab Student"])
 
 
 def init_dvc_if_missing() -> None:
@@ -146,7 +148,9 @@ def main() -> int:
     print(f"  Raw inputs registered : {len(added)}")
     print()
     print("  Commit the DVC scaffolding to Git:")
-    print("    git add *.dvc .gitignore .dvc/.gitignore .dvc/config .dvcignore dvc.yaml")
+    print(
+        "    git add *.dvc .gitignore .dvc/.gitignore .dvc/config .dvcignore dvc.yaml"
+    )
     print("    git commit -m 'Add DVC pipeline (clean → features → train)'")
     print()
     print("  Run the FULL pipeline (raw Excel → trained model) in one command:")

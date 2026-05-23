@@ -31,8 +31,8 @@ import pandas as pd
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RAW_XLSX     = PROJECT_ROOT / "Pune Real Estate Data.xlsx"
-CLEAN_CSV    = PROJECT_ROOT / "data_cleaned.csv"
+RAW_XLSX = PROJECT_ROOT / "Pune Real Estate Data.xlsx"
+CLEAN_CSV = PROJECT_ROOT / "data_cleaned.csv"
 
 # ── Regex (pre-compiled, used in multiple cleaners) ──────────────────────────
 NUMBERS_PATTERN = re.compile(r"[-+]?(\d*\.\d+|\d+)")
@@ -65,8 +65,8 @@ def _clean_price(val) -> float:
 
 def _split_location(df: pd.DataFrame) -> pd.DataFrame:
     """Split 'Pune, Maharashtra, India' → city / state / country (lowercased)."""
-    df["City"]    = df["Location"].apply(lambda x: x.split(",")[0].lower().strip())
-    df["State"]   = df["Location"].apply(lambda x: x.split(",")[1].lower().strip())
+    df["City"] = df["Location"].apply(lambda x: x.split(",")[0].lower().strip())
+    df["State"] = df["Location"].apply(lambda x: x.split(",")[1].lower().strip())
     df["Country"] = df["Location"].apply(lambda x: x.split(",")[2].lower().strip())
     return df
 
@@ -74,13 +74,13 @@ def _split_location(df: pd.DataFrame) -> pd.DataFrame:
 def _encode_binary_amenities(df: pd.DataFrame) -> pd.DataFrame:
     """Encode the 7 Yes/No amenity columns as 0/1 ints with the Lab 1 names."""
     binary_cols = {
-        "ClubHouse":                       "ClubHouse Cleaned",
-        "School / University in Township ": "School Cleaned",   # trailing space matches raw col name
-        "Hospital in TownShip":            "Hospital Cleaned",
-        "Mall in TownShip":                "Mall Cleaned",
-        "Park / Jogging track":            "Park Cleaned",
-        "Swimming Pool":                   "Pool Cleaned",
-        "Gym":                             "Gym Cleaned",
+        "ClubHouse": "ClubHouse Cleaned",
+        "School / University in Township ": "School Cleaned",  # trailing space matches raw col name
+        "Hospital in TownShip": "Hospital Cleaned",
+        "Mall in TownShip": "Mall Cleaned",
+        "Park / Jogging track": "Park Cleaned",
+        "Swimming Pool": "Pool Cleaned",
+        "Gym": "Gym Cleaned",
     }
     for raw_col, clean_col in binary_cols.items():
         normalized = df[raw_col].apply(lambda x: str(x).lower().strip())
@@ -88,7 +88,9 @@ def _encode_binary_amenities(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _clip_outliers(df: pd.DataFrame, col: str, low_pct: int = 5, hi_pct: int = 95) -> pd.DataFrame:
+def _clip_outliers(
+    df: pd.DataFrame, col: str, low_pct: int = 5, hi_pct: int = 95
+) -> pd.DataFrame:
     """Clip a numeric column at the given percentiles (matches Lab 1 §6.2)."""
     lower = df[col].quantile(low_pct / 100)
     upper = df[col].quantile(hi_pct / 100)
@@ -122,16 +124,24 @@ def main() -> Path:
 
     # 3. Lowercase + strip the categorical text columns.
     print("[3/6] Cleaning text columns (lowercase + strip)")
-    df["Sub-Area Cleaned"]         = df["Sub-Area"].apply(lambda x: str(x).lower().strip())
-    df["Company Name Cleaned"]     = df["Company Name"].apply(lambda x: str(x).lower().strip())
-    df["TownShip Cleaned"]         = df["TownShip Name/ Society Name"].apply(lambda x: str(x).lower().strip())
-    df["Description Cleaned"]      = df["Description"].apply(lambda x: str(x).lower().strip())
+    df["Sub-Area Cleaned"] = df["Sub-Area"].apply(lambda x: str(x).lower().strip())
+    df["Company Name Cleaned"] = df["Company Name"].apply(
+        lambda x: str(x).lower().strip()
+    )
+    df["TownShip Cleaned"] = df["TownShip Name/ Society Name"].apply(
+        lambda x: str(x).lower().strip()
+    )
+    df["Description Cleaned"] = df["Description"].apply(
+        lambda x: str(x).lower().strip()
+    )
 
     # 4. Numeric extractions via regex.
     print("[4/6] Extracting numeric fields via regex (property type, area, price)")
-    df["Property Type Cleaned"] = df["Propert Type"].apply(_clean_property_type)  # NB: source typo
-    df["Area Cleaned"]          = df["Property Area in Sq. Ft."].apply(_clean_area)
-    df["Price Cleaned"]         = df["Price in lakhs"].apply(_clean_price)
+    df["Property Type Cleaned"] = df["Propert Type"].apply(
+        _clean_property_type
+    )  # NB: source typo
+    df["Area Cleaned"] = df["Property Area in Sq. Ft."].apply(_clean_area)
+    df["Price Cleaned"] = df["Price in lakhs"].apply(_clean_price)
 
     # 5. Binary amenity encoding.
     print("[5/6] Encoding 7 amenity columns as 0/1")
@@ -140,13 +150,23 @@ def main() -> Path:
     # 6. Assemble + drop NaN-price + clip outliers.
     print("[6/6] Assembling final dataframe")
     keep = [
-        "City", "State", "Country",
-        "Property Type Cleaned", "Sub-Area Cleaned",
-        "Company Name Cleaned", "TownShip Cleaned",
+        "City",
+        "State",
+        "Country",
+        "Property Type Cleaned",
+        "Sub-Area Cleaned",
+        "Company Name Cleaned",
+        "TownShip Cleaned",
         "Description Cleaned",
-        "ClubHouse Cleaned", "School Cleaned", "Hospital Cleaned",
-        "Mall Cleaned", "Park Cleaned", "Pool Cleaned", "Gym Cleaned",
-        "Area Cleaned", "Price Cleaned",
+        "ClubHouse Cleaned",
+        "School Cleaned",
+        "Hospital Cleaned",
+        "Mall Cleaned",
+        "Park Cleaned",
+        "Pool Cleaned",
+        "Gym Cleaned",
+        "Area Cleaned",
+        "Price Cleaned",
     ]
     out = df[keep].copy()
 
