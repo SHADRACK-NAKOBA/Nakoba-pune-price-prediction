@@ -1,0 +1,43 @@
+# AWS App Runner service configuration.
+#
+# App Runner is the simplest AWS deployment path: one command, no clusters,
+# no load-balancer setup, automatic TLS.
+#
+# Replace YOUR_AWS_ACCOUNT_ID and YOUR_REGION with real values,
+# then follow the App Runner phase in Nakoba's Production Steps/PROD_STEPS.md.
+#
+# Note: App Runner does not consume this YAML directly via CLI;
+# the PROD_STEPS.md shows the equivalent --cli-input-json command.
+# This file documents the intended service configuration.
+
+service:
+  name: pune-price-prediction
+
+  source:
+    type: ECR
+    imageRepository:
+      imageIdentifier: "YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/pune-price-prediction:latest"
+      imageRepositoryType: ECR
+      imageConfiguration:
+        port: "8000"
+        runtimeEnvironmentVariables:
+          PORT: "8000"
+          API_HOST: "0.0.0.0"
+          CORS_ORIGINS: "*"
+
+  instanceConfiguration:
+    cpu:    "1 vCPU"
+    memory: "2 GB"
+
+  healthCheckConfiguration:
+    protocol:           HTTP
+    path:               /health
+    interval:           10
+    timeout:            5
+    healthyThreshold:   1
+    unhealthyThreshold: 5
+
+  autoScalingConfiguration:
+    minSize:        1
+    maxSize:        3
+    maxConcurrency: 100

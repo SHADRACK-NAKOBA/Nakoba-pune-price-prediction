@@ -1,0 +1,45 @@
+# AWS CodeBuild build specification.
+# Builds the Docker image and pushes it to Amazon ECR.
+#
+# Required CodeBuild environment variables (configure in the CodeBuild project):
+#   AWS_ACCOUNT_ID  — your 12-digit AWS account number
+#   AWS_REGION      — e.g. us-east-1
+#   ECR_REPO_NAME   — e.g. pune-price-prediction
+#
+# The task definition file (ecs-task-definition.json) must have
+# YOUR_AWS_ACCOUNT_ID and YOUR_REGION replaced with real values before
+# registering it with ECS.
+
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "=== Logging in to Amazon ECR ==="
+      - aws ecr get-login-password --region $AWS_REGION
+          | docker login --username AWS --password-stdin
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - ECR_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_NAME
+      - COMMIT_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
+      - echo "Image will be tagged $ECR_URI:$COMMIT_TAG"
+
+  build:
+    commands:
+      - echo "=== Building Docker image ==="
+      - docker build -t $ECR_REPO_NAME:$COMMIT_TAG -t $ECR_REPO_NAME:latest .
+      - docker tag $ECR_REPO_NAME:$COMMIT_TAG $ECR_URI:$COMMIT_TAG
+      - docker tag $ECR_REPO_NAME:latest       $ECR_URI:latest
+
+  post_build:
+    commands:
+      - echo "=== Pushing to ECR ==="
+      - docker push $ECR_URI:$COMMIT_TAG
+      - docker push $ECR_URI:latest
+      - echo "=== Writing ECS imagedefinitions.json ==="
+      - printf '[{"name":"pune-price-api","imageUri":"%s:%s"}]'
+          $ECR_URI $COMMIT_TAG > imagedefinitions.json
+      - echo "Build complete — $ECR_URI:$COMMIT_TAG"
+
+artifacts:
+  files:
+    - imagedefinitions.json
