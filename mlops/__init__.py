@@ -35,7 +35,8 @@ except ImportError:
 # auto-derive the MLflow URI + basic-auth vars so every `python -m mlops.x`
 # logs to DagsHub instead of the local SQLite DB. To force local logging
 # despite DagsHub creds, set MLFLOW_TRACKING_URI explicitly (in .env or shell).
-import os as _os
+import os as _os  # noqa: E402
+
 if (
     not _os.environ.get("MLFLOW_TRACKING_URI")
     and _os.environ.get("DAGSHUB_USER")

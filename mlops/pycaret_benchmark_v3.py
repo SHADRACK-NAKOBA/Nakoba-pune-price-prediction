@@ -80,7 +80,6 @@ v1/v2 because of the second setup + finalize on the full dataset).
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -257,7 +256,7 @@ def main() -> dict:
     tuned = tune_model(best, n_iter=20, optimize="R2", choose_better=True, verbose=False)
 
     # 6. Finalize on the training pool (this is the model we SCORE).
-    print(f"[4/6] finalize_model() → refit on full training pool (159 rows)")
+    print("[4/6] finalize_model() → refit on full training pool (159 rows)")
     scored_model = finalize_model(tuned)
     scored_path = MODEL_DIR / "pycaret_pune_real_estate"
     save_model(scored_model, str(scored_path))

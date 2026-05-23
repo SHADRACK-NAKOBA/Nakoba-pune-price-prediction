@@ -95,7 +95,7 @@ def main() -> list[dict]:
 
     print(f"Sweeping {len(alphas)} ridge alphas: {alphas}")
     print(f"(Lasso alpha pinned at {lasso_alpha} for the sweep — only Ridge varies)")
-    print(f"5-fold CV per alpha; train + CV + test scores logged.\n")
+    print("5-fold CV per alpha; train + CV + test scores logged.\n")
 
     print(f"  {'α':<10s}{'Train R²':>10s}{'CV R²':>14s}{'Test R²':>10s}"
           f"{'T−Test':>10s}{'Verdict':>10s}{'Run':>10s}")
@@ -192,7 +192,7 @@ def main() -> list[dict]:
     print()
     print(f"Inspect the full sweep:  mlflow ui --backend-store-uri sqlite:///"
           f"{(PROJECT_ROOT / 'mlflow.db').name}")
-    print(f"Filter the runs:         tags.sweep = 'ridge_alpha_v2'")
+    print("Filter the runs:         tags.sweep = 'ridge_alpha_v2'")
     return results
 
 

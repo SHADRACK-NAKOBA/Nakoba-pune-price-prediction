@@ -40,7 +40,6 @@ After that, this script runs in 60-90 seconds.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -205,7 +204,7 @@ def main() -> dict:
     tuned = tune_model(best, n_iter=20, optimize="R2", choose_better=True, verbose=False)
 
     # 6. Finalize (refit on full training pool) and save the pipeline.
-    print(f"[4/5] finalize_model() → refit on full training data")
+    print("[4/5] finalize_model() → refit on full training data")
     final = finalize_model(tuned)
     pycaret_path = MODEL_DIR / "pycaret_pune_real_estate"
     save_model(final, str(pycaret_path))

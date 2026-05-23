@@ -38,7 +38,7 @@ def main() -> dict[str, float]:
 
     # 1. Read config.
     params = load_params()
-    print(f"\n[1/5] Loaded params.yaml")
+    print("\n[1/5] Loaded params.yaml")
     print(f"      ridge.alpha   = {params['ridge']['alpha']}")
     print(f"      lasso.alpha   = {params['lasso']['alpha']}")
     print(f"      test_size     = {params['data']['test_size']}")
@@ -65,7 +65,7 @@ def main() -> dict[str, float]:
     interval_est = compute_interval_estimate(
         y_train, train_pred, confidence=params["interval"]["confidence"]
     )
-    print(f"\n[4/5] Test set metrics:")
+    print("\n[4/5] Test set metrics:")
     for key, val in test_metrics.items():
         print(f"        {key:5s} = {val:.4f}")
     margin = interval_est["z_score"] * interval_est["residual_std"]
@@ -84,7 +84,7 @@ def main() -> dict[str, float]:
     }
     metrics_path = write_metrics_json(metrics_payload, name="train_metrics.json")
 
-    print(f"\n[5/5] Artifacts written:")
+    print("\n[5/5] Artifacts written:")
     print(f"        {paths['model'].relative_to(paths['model'].parent.parent)}")
     print(f"        {paths['interval'].relative_to(paths['interval'].parent.parent)}")
     print(f"        {metrics_path.relative_to(metrics_path.parent.parent)}")

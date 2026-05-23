@@ -79,7 +79,7 @@ def configure_mlflow() -> Optional[str]:
     os.environ["MLFLOW_TRACKING_PASSWORD"] = env["token"]
 
     print(f"✅ MLFLOW_TRACKING_URI = {uri}")
-    print(f"✅ MLFLOW_TRACKING_USERNAME and MLFLOW_TRACKING_PASSWORD set")
+    print("✅ MLFLOW_TRACKING_USERNAME and MLFLOW_TRACKING_PASSWORD set")
     print()
     print("Subsequent calls in THIS Python process will log to DagsHub.")
     print("To make it permanent, export the same three env vars in your shell")
@@ -104,7 +104,7 @@ def print_dvc_commands() -> None:
     print("Run these once, from the project root, after `dvc init`:")
     print()
     print(f"    dvc remote add -d origin https://dagshub.com/{user}/{repo}.dvc")
-    print(f"    dvc remote modify origin --local auth basic")
+    print("    dvc remote modify origin --local auth basic")
     print(f"    dvc remote modify origin --local user {user}")
     print(f"    dvc remote modify origin --local password {token}")
     print()

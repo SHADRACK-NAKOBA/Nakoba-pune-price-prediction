@@ -59,11 +59,16 @@ def _model_open(path, *args, **kwargs):
 def _pickle_side_effect(file_obj):
     """Return the right mock artifact based on the file path stored in .name."""
     name = getattr(file_obj, "name", "")
-    if "count_vectorizer"          in name: return _MOCK_VEC
-    if "sub_area_price_map"        in name: return _SUB_AREA_MAP
-    if "amenities_score_price_map" in name: return _AMENITIES_MAP
-    if "interval_est"              in name: return _INTERVAL_EST
-    if "all_feature_names"         in name: return _FEATURE_NAMES
+    if "count_vectorizer" in name:
+        return _MOCK_VEC
+    if "sub_area_price_map" in name:
+        return _SUB_AREA_MAP
+    if "amenities_score_price_map" in name:
+        return _AMENITIES_MAP
+    if "interval_est" in name:
+        return _INTERVAL_EST
+    if "all_feature_names" in name:
+        return _FEATURE_NAMES
     return {}
 
 
