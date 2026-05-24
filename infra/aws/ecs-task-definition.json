@@ -4,12 +4,11 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/ecsTaskExecutionRole",
-  "taskRoleArn":      "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/ecsTaskRole",
+  "executionRoleArn": "arn:aws:iam::211125741068:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name":      "pune-price-api",
-      "image":     "YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/pune-price-prediction:latest",
+      "image":     "211125741068.dkr.ecr.us-east-1.amazonaws.com/pune-price-prediction:latest",
       "essential": true,
       "portMappings": [
         {
@@ -22,21 +21,11 @@
         { "name": "API_HOST",     "value": "0.0.0.0" },
         { "name": "CORS_ORIGINS", "value": "*" }
       ],
-      "secrets": [
-        {
-          "name":      "DAGSHUB_TOKEN",
-          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:pune-price-prediction/env:DAGSHUB_TOKEN::"
-        },
-        {
-          "name":      "DAGSHUB_USER",
-          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:secret:pune-price-prediction/env:DAGSHUB_USER::"
-        }
-      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group":         "/ecs/pune-price-prediction",
-          "awslogs-region":        "YOUR_REGION",
+          "awslogs-region":        "us-east-1",
           "awslogs-stream-prefix": "ecs"
         }
       },
