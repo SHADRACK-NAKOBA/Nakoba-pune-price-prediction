@@ -310,11 +310,11 @@ FileNotFoundError: model/property_price_prediction_voting.sav
 The Docker image was built when `model/` was empty (only `.gitkeep`).
 The real model files are DVC-tracked and were not on disk.
 
-### Fix — Stub model files (sufficient for the service to start)
+### Fix — Phase 1: Stub model files (get service running first)
 
 The file `scripts/create_model_stubs.py` generates 6 valid sklearn objects
 that inference.py can load. The service starts, all endpoints respond.
-**Predictions are not meaningful with stubs** (see Section 13 to fix).
+**Predictions are not meaningful with stubs** (see Section 13 for real files).
 
 ```powershell
 # Generate stubs
@@ -333,17 +333,60 @@ aws ecs update-service `
   --region $REGION
 ```
 
+### Fix — Phase 2: Replace stubs with real trained model files
+
+Searched the machine for `.sav` files and found the real Lab 3 outputs at:
+`C:\Users\admin\mlops-pune-price-prediction\model\` (most recent, May 9 2026)
+
+All 6 required files were present:
+
+| File | Size | Notes |
+|---|---|---|
+| `property_price_prediction_voting.sav` | 5,451 bytes | VotingRegressor |
+| `count_vectorizer.pkl` | 47,243 bytes | Real trained vocabulary |
+| `all_feature_names.pkl` | 458 bytes | 115 feature names |
+| `amenities_score_price_map.pkl` | 71 bytes | Amenity encoding |
+| `sub_area_price_map.pkl` | 731 bytes | Location encoding |
+| `interval_est.pkl` | 73 bytes | z_score + residual_std |
+
+```powershell
+# Copy real model files into the project
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\all_feature_names.pkl"        "model\"
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\amenities_score_price_map.pkl" "model\"
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\count_vectorizer.pkl"          "model\"
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\interval_est.pkl"              "model\"
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\property_price_prediction_voting.sav" "model\"
+Copy-Item "C:\Users\admin\mlops-pune-price-prediction\model\sub_area_price_map.pkl"        "model\"
+
+# Rebuild and push with real models
+docker build -t "$ECR_URI`:latest" .
+docker push "$ECR_URI`:latest"
+aws ecs update-service --cluster $CLUSTER --service $SERVICE `
+  --force-new-deployment --region $REGION
+```
+
 ---
 
 ## Step 11 — Get the Public IP
+
+### Issue encountered
+Running `list-tasks` without `--desired-status RUNNING` returned an empty ARN
+even when the service showed `"running": 1`. The `$TASK_ARN` variable was empty,
+causing all downstream commands to fail with `taskId length should be one of [32,36]`
+and the IP to show as `None`.
+
+### Fix — Always use `--desired-status RUNNING`
 
 Run this 90 seconds after any new deployment:
 
 ```powershell
 Start-Sleep -Seconds 90
 
+# IMPORTANT: must include --desired-status RUNNING
 $TASK_ARN = aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE `
-  --region $REGION --query "taskArns[0]" --output text
+  --region $REGION --desired-status RUNNING --query "taskArns[0]" --output text
+
+echo "Task ARN: $TASK_ARN"
 
 $ENI = aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN `
   --region $REGION `
@@ -355,6 +398,17 @@ $PUBLIC_IP = aws ec2 describe-network-interfaces --network-interface-ids $ENI `
 
 echo "http://$PUBLIC_IP`:8000/health"
 echo "http://$PUBLIC_IP`:8000/docs"
+echo "http://$PUBLIC_IP`:8000/predict"
+```
+
+If `$TASK_ARN` is still empty after 90 seconds, check service events:
+
+```powershell
+aws ecs describe-services --cluster $CLUSTER --services $SERVICE --region $REGION `
+  --query "services[0].{running:runningCount,pending:pendingCount,desired:desiredCount}"
+
+aws ecs describe-services --cluster $CLUSTER --services $SERVICE --region $REGION `
+  --query "services[0].events[:3]"
 ```
 
 **Important:** This IP changes every time ECS replaces the task.
@@ -771,7 +825,9 @@ aws ecs update-service --cluster $CLUSTER --service $SERVICE `
 | 5 | Container won't start: `log group does not exist` | CloudWatch log group `/ecs/pune-price-prediction` never created | `aws logs create-log-group` |
 | 6 | Container crashes: `FileNotFoundError: model/property_price_prediction_voting.sav` | Docker image built with empty `model/` directory | Run `create_model_stubs.py`, rebuild image |
 | 7 | `--service-name` not recognized | ECS update-service uses `--service` not `--service-name` | Use `--service $SERVICE` |
-| 8 | Task ARN empty, IP shows `None` | Task not yet started; script ran too early | `Start-Sleep -Seconds 90` before querying |
+| 8 | Task ARN empty, IP shows `None` (first time) | Task not yet started; script ran too early | `Start-Sleep -Seconds 90` before querying |
+| 9 | Task ARN empty even with `running: 1` | `list-tasks` without `--desired-status RUNNING` returns empty | Always add `--desired-status RUNNING` to `list-tasks` |
+| 10 | `/predict` returns wrong values (always 1.0) | Docker image built with stub model files | Copy real model files from `C:\Users\admin\mlops-pune-price-prediction\model\`, rebuild and push |
 
 ---
 
@@ -786,8 +842,8 @@ aws ecs update-service --cluster $CLUSTER --service $SERVICE `
 | GitHub Actions CI (lint + test + build) | ✅ Passing |
 | `/health` endpoint | ✅ Responding |
 | `/docs` Swagger UI | ✅ Accessible |
-| `/predict` endpoint | ⚠️ Returns stubs (wrong values) |
-| Real model files | ❌ Need DVC pull or Lab 3 outputs |
+| `/predict` endpoint | ✅ Real model files deployed — returns actual predictions |
+| Real model files | ✅ Copied from `C:\Users\admin\mlops-pune-price-prediction\model\` |
 | MLflow dashboard | ❌ Not yet set up |
 | Stable HTTPS URL | ❌ Needs ALB + ACM + domain |
 | GitHub Actions auto-deploy | ❌ Needs 6 secrets added |
