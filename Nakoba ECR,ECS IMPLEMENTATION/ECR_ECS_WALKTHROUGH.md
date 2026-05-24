@@ -663,11 +663,71 @@ https://api.yourdomain.com/health   ← stable HTTPS URL
 https://api.yourdomain.com/docs     ← Swagger UI for real users
 ```
 
+#### ALB cost breakdown
+
+| Resource | Cost |
+|---|---|
+| ALB hourly | $0.008/hr × 720h = ~$5.76/mo |
+| ALB LCU usage (light traffic) | ~$2–3/mo |
+| ACM certificate | **Free** |
+| Route 53 hosted zone | $0.50/mo |
+| **Total extra for HTTPS** | **~$8–9/mo** |
+
+#### Alternative — No domain? Use ALB DNS directly (HTTP only)
+
+If you don't have a domain, skip Steps 14a and 14f.
+After creating the ALB and target group, get its DNS name:
+
+```powershell
+$ALB_DNS = aws elbv2 describe-load-balancers --load-balancer-arns $ALB_ARN `
+  --query "LoadBalancers[0].DNSName" --output text --region $REGION
+echo "http://$ALB_DNS/health"
+```
+
+This gives you a stable URL like:
+`http://pune-api-alb-1234567890.us-east-1.elb.amazonaws.com/health`
+
+It never changes — even when ECS replaces the task. No domain needed.
+
+---
+
+## Section 14g — ECS Auto-Scaling (handle real user load)
+
+Without auto-scaling, you have exactly 1 task running at all times.
+Under heavy load it will slow down or crash. This adds automatic scale-out.
+
+```powershell
+# Register the ECS service as a scalable target
+aws application-autoscaling register-scalable-target `
+  --service-namespace ecs `
+  --resource-id "service/$CLUSTER/$SERVICE" `
+  --scalable-dimension ecs:service:DesiredCount `
+  --min-capacity 1 `
+  --max-capacity 4 `
+  --region $REGION
+
+# Scale OUT when CPU > 70% for 2 minutes
+aws application-autoscaling put-scaling-policy `
+  --service-namespace ecs `
+  --resource-id "service/$CLUSTER/$SERVICE" `
+  --scalable-dimension ecs:service:DesiredCount `
+  --policy-name pune-api-scale-out `
+  --policy-type TargetTrackingScaling `
+  --target-tracking-scaling-policy-configuration `
+    "TargetValue=70.0,PredefinedMetricSpecification={PredefinedMetricType=ECSServiceAverageCPUUtilization},ScaleOutCooldown=60,ScaleInCooldown=300" `
+  --region $REGION
+```
+
+This keeps you at 1 task at idle, scales up to 4 tasks under load, and
+scales back down automatically. Each extra task costs ~$0.59/day.
+
 ---
 
 ## Section 15 — MLflow Dashboard
 
-### Option A — Run locally (instant, free)
+Three options — pick one. DagsHub (Option B) is recommended for this project.
+
+### Option A — Run locally (instant, free, private)
 
 ```powershell
 cd "C:\Users\admin\Desktop\mlops-pune-price-prediction"
@@ -676,50 +736,96 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 # Open http://localhost:5000
 ```
 
-You will see all past training runs, metrics (R², RMSE, MAE), and parameters.
+**What you'll see in the UI:**
+- Every training run with timestamp
+- Metrics: R², RMSE, MAE per run
+- Parameters: ridge alpha, lasso alpha, test_size, random_state
+- Artifacts: model file path
 
-### Option B — DagsHub hosted MLflow (shareable link, free)
+**Log a new training run:**
+```powershell
+# Activate your venv first
+& "C:\Users\admin\Downloads\MLOps_Pune_Price_Prediction_Project\venv\Scripts\Activate.ps1"
 
-DagsHub gives you a hosted MLflow UI accessible from any browser — no server needed.
+# Single training run → logged to mlflow.db
+python -m mlops.mlflow_train
 
-#### Setup (one-time)
+# Sweep Ridge alpha 0.01 → 1000, find best
+python -m mlops.mlflow_sweep
 
-1. Go to **https://dagshub.com** → Sign up with GitHub
-2. Click **"Create new repo"** → **"Connect a repository"**
+# Query best run from the sweep
+python -m mlops.mlflow_query
+```
+
+**Limitation:** Only visible on your laptop. Not shareable.
+
+---
+
+### Option B — DagsHub hosted MLflow (recommended — free + shareable)
+
+DagsHub gives you a hosted MLflow UI at a public URL. No server to manage.
+
+#### Step B1 — Create DagsHub account
+
+1. Go to **https://dagshub.com** → **Sign up with GitHub**
+2. Click **"Create"** → **"Connect a repository"**
 3. Select `SHADRACK-NAKOBA/Nakoba-pune-price-prediction`
-4. DagsHub creates a mirror and gives you:
-   - MLflow UI: `https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.mlflow`
-   - DVC remote: `https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.dvc`
+4. You now have:
+   - **MLflow UI:** `https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.mlflow`
+   - **DVC remote:** `https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.dvc`
 
-#### Configure your project to log to DagsHub
+#### Step B2 — Get your DagsHub token
+
+Go to **https://dagshub.com/user/settings/tokens** → Generate new token → copy it.
+
+#### Step B3 — Configure the project
 
 ```powershell
-# Get token from https://dagshub.com/user/settings/tokens
 $env:DAGSHUB_USER  = "SHADRACK-NAKOBA"
 $env:DAGSHUB_TOKEN = "your_dagshub_token_here"
 $env:DAGSHUB_REPO  = "Nakoba-pune-price-prediction"
 
-# Test the connection
+# Verify credentials are working
 python -m mlops.dagshub_setup --check
+
+# Set MLflow URI to DagsHub for this session
 python -m mlops.dagshub_setup --configure
 ```
 
-#### Log an experiment to DagsHub
+#### Step B4 — Log experiments to DagsHub
 
 ```powershell
-# This logs a training run to DagsHub MLflow
+# Single run
 python -m mlops.mlflow_train
 
-# Or run a full alpha sweep
+# Ridge alpha sweep (logs ~10 runs with CV scores)
 python -m mlops.mlflow_sweep
+
+# Query: which alpha gave best CV R²?
+python -m mlops.mlflow_query
 ```
 
-Open your DagsHub MLflow UI:
-`https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.mlflow`
+Open **https://dagshub.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction.mlflow**
+and you'll see all runs, metrics, and parameters in a shareable web UI.
 
-#### Add DagsHub secrets to GitHub Actions
+#### Step B5 — Push real model files to DagsHub DVC remote
 
-In your GitHub repo → Settings → Secrets → Actions, add:
+```powershell
+dvc remote modify origin --local auth basic
+dvc remote modify origin --local user $env:DAGSHUB_USER
+dvc remote modify origin --local password $env:DAGSHUB_TOKEN
+
+# Add model files to DVC tracking and push
+dvc add model/property_price_prediction_voting.sav
+dvc add model/count_vectorizer.pkl
+dvc push
+```
+
+Now anyone can `dvc pull` the real model files from DagsHub.
+
+#### Step B6 — Add secrets to GitHub Actions
+
+Go to: **https://github.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction/settings/secrets/actions**
 
 | Secret | Value |
 |---|---|
@@ -727,7 +833,129 @@ In your GitHub repo → Settings → Secrets → Actions, add:
 | `DAGSHUB_TOKEN` | your DagsHub token |
 | `DAGSHUB_REPO` | `Nakoba-pune-price-prediction` |
 
-After this, every CI run will `dvc pull` the real model files automatically.
+After this, every CI push automatically `dvc pull` real model files and logs
+training metrics to DagsHub MLflow.
+
+---
+
+### Option C — Self-hosted MLflow on ECS (same AWS cluster, always-on)
+
+Deploy MLflow as a second ECS service in the `pune-mlops` cluster.
+Use S3 for artifact storage and SQLite on EFS for the tracking DB.
+This keeps everything in AWS and avoids third-party dependencies.
+
+#### Step C1 — Create S3 bucket for MLflow artifacts
+
+```powershell
+$MLFLOW_BUCKET = "pune-mlops-artifacts-211125741068"
+aws s3 mb "s3://$MLFLOW_BUCKET" --region $REGION
+
+# Allow ECS task execution role to access S3
+aws iam put-role-policy `
+  --role-name ecsTaskExecutionRole `
+  --policy-name mlflow-s3-access `
+  --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:*\"],\"Resource\":[\"arn:aws:s3:::$MLFLOW_BUCKET\",\"arn:aws:s3:::$MLFLOW_BUCKET/*\"]}]}"
+```
+
+#### Step C2 — Register MLflow task definition
+
+```powershell
+$MLFLOW_TASK = @"
+{
+  "family": "pune-mlflow",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::211125741068:role/ecsTaskExecutionRole",
+  "containerDefinitions": [{
+    "name": "mlflow",
+    "image": "ghcr.io/mlflow/mlflow:latest",
+    "essential": true,
+    "portMappings": [{"containerPort": 5000, "protocol": "tcp"}],
+    "command": [
+      "mlflow", "server",
+      "--host", "0.0.0.0",
+      "--port", "5000",
+      "--backend-store-uri", "sqlite:///mlflow.db",
+      "--default-artifact-root", "s3://pune-mlops-artifacts-211125741068/mlflow"
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/pune-mlflow",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }]
+}
+"@
+
+$MLFLOW_TASK | Out-File -FilePath "mlflow-task.json" -Encoding utf8
+
+aws logs create-log-group --log-group-name "/ecs/pune-mlflow" --region $REGION
+
+aws ecs register-task-definition `
+  --cli-input-json file://mlflow-task.json `
+  --region $REGION
+```
+
+#### Step C3 — Create MLflow security group and service
+
+```powershell
+# Security group: allow port 5000
+$MLFLOW_SG = aws ec2 create-security-group `
+  --group-name pune-mlflow-sg `
+  --description "MLflow UI port 5000" `
+  --vpc-id $VPC_ID --region $REGION `
+  --query "GroupId" --output text
+
+aws ec2 authorize-security-group-ingress `
+  --group-id $MLFLOW_SG --protocol tcp --port 5000 --cidr 0.0.0.0/0 `
+  --region $REGION
+
+# Create MLflow service
+aws ecs create-service `
+  --cluster $CLUSTER `
+  --service-name pune-mlflow `
+  --task-definition pune-mlflow:1 `
+  --desired-count 1 `
+  --launch-type FARGATE `
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-0a8ba0a09aaffa2f7,subnet-0d5a8a16c7aa5a916],securityGroups=[$MLFLOW_SG],assignPublicIp=ENABLED}" `
+  --region $REGION
+```
+
+#### Step C4 — Get MLflow public IP
+
+```powershell
+Start-Sleep -Seconds 60
+
+$MLFLOW_TASK_ARN = aws ecs list-tasks --cluster $CLUSTER --service-name pune-mlflow `
+  --region $REGION --desired-status RUNNING --query "taskArns[0]" --output text
+
+$MLFLOW_ENI = aws ecs describe-tasks --cluster $CLUSTER --tasks $MLFLOW_TASK_ARN `
+  --region $REGION `
+  --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" `
+  --output text
+
+$MLFLOW_IP = aws ec2 describe-network-interfaces --network-interface-ids $MLFLOW_ENI `
+  --query "NetworkInterfaces[0].Association.PublicIp" --output text --region $REGION
+
+echo "MLflow UI: http://$MLFLOW_IP`:5000"
+```
+
+#### Step C5 — Point your training scripts at ECS MLflow
+
+```powershell
+$env:MLFLOW_TRACKING_URI = "http://$MLFLOW_IP`:5000"
+python -m mlops.mlflow_train   # logs appear in ECS-hosted MLflow
+```
+
+**Cost:** ~$1.50/month extra (256 CPU / 512MB Fargate task)
+
+**Note:** The SQLite DB is ephemeral (lost on task restart). For persistence,
+use Amazon RDS PostgreSQL as the backend-store-uri instead (~$13/mo extra).
 
 ---
 
