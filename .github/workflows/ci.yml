@@ -119,11 +119,17 @@ jobs:
 
   # ── Job 4: Deploy to AWS ECR + ECS ───────────────────────────────────────────
   # Triggered MANUALLY via "Run workflow" button in GitHub Actions UI.
-  # Requires these GitHub Secrets to be set (Settings → Secrets → Actions):
-  #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
-  #   AWS_ACCOUNT_ID, ECR_REPO_NAME
-  # Optional (for ECS auto-update):
-  #   ECS_CLUSTER_NAME, ECS_SERVICE_NAME
+  #
+  # Required GitHub Secrets (Settings → Secrets → Actions):
+  #   AWS_ACCESS_KEY_ID       — IAM user access key
+  #   AWS_SECRET_ACCESS_KEY   — IAM user secret key
+  #   AWS_REGION              — e.g. us-east-1
+  #   ECR_REPO_NAME           — e.g. pune-price-prediction
+  #   ECS_CLUSTER_NAME        — e.g. pune-mlops
+  #   ECS_SERVICE_NAME        — e.g. pune-price-prediction
+  #
+  # Optional (enables real model files via DVC):
+  #   DAGSHUB_TOKEN, DAGSHUB_USER, DAGSHUB_REPO
   deploy:
     name: Deploy → ECR + ECS
     runs-on: ubuntu-latest
@@ -145,18 +151,26 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Pull model artifacts via DVC
+      - name: Pull model artifacts via DVC (create stubs if secrets absent)
         env:
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
           DAGSHUB_USER:  ${{ secrets.DAGSHUB_USER }}
           DAGSHUB_REPO:  ${{ secrets.DAGSHUB_REPO }}
         run: |
           if [ -n "$DAGSHUB_TOKEN" ]; then
+            echo "Pulling real model artifacts from DagsHub..."
             pip install "dvc[s3]" dagshub --quiet
             dvc remote modify origin --local auth basic
             dvc remote modify origin --local user  "$DAGSHUB_USER"
             dvc remote modify origin --local password "$DAGSHUB_TOKEN"
             dvc pull model/ --force
+          fi
+          if [ ! -f model/property_price_prediction_voting.sav ]; then
+            echo "No real model files found — creating stubs for deploy..."
+            pip install scikit-learn joblib --quiet
+            python scripts/create_model_stubs.py
+          else
+            echo "Real model artifacts ready."
           fi
 
       - name: Build, tag, and push image to ECR
@@ -174,26 +188,53 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Force new ECS deployment (if ECS_CLUSTER_NAME secret is set)
-        if: ${{ env.ECS_CLUSTER_NAME != '' }}
-        env:
-          ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
-          ECS_SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
+      - name: Force new ECS deployment
         run: |
           aws ecs update-service \
-            --cluster  $ECS_CLUSTER_NAME \
-            --service  $ECS_SERVICE_NAME \
+            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+            --service ${{ secrets.ECS_SERVICE_NAME }} \
             --force-new-deployment \
-            --region   ${{ secrets.AWS_REGION }}
-          echo "ECS rolling deployment triggered for $ECS_SERVICE_NAME"
+            --region  ${{ secrets.AWS_REGION }}
+          echo "ECS rolling deployment triggered for ${{ secrets.ECS_SERVICE_NAME }}"
 
-      - name: Print deployment summary
+      - name: Wait for ECS service to stabilise
         run: |
+          echo "Waiting for ECS service to reach steady state (up to 5 min)..."
+          aws ecs wait services-stable \
+            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+            --services ${{ secrets.ECS_SERVICE_NAME }} \
+            --region  ${{ secrets.AWS_REGION }}
+          echo "Service is stable."
+
+      - name: Get live public IP and print summary
+        run: |
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+            --service-name ${{ secrets.ECS_SERVICE_NAME }} \
+            --region ${{ secrets.AWS_REGION }} \
+            --desired-status RUNNING \
+            --query "taskArns[0]" --output text)
+
+          ENI=$(aws ecs describe-tasks \
+            --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+            --tasks $TASK_ARN \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" \
+            --output text)
+
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids $ENI \
+            --query "NetworkInterfaces[0].Association.PublicIp" \
+            --output text --region ${{ secrets.AWS_REGION }})
+
           echo "============================================="
           echo "DEPLOYMENT COMPLETE"
           echo "============================================="
-          echo "Image: ${{ steps.push-image.outputs.image }}"
+          echo "Image : ${{ steps.push-image.outputs.image }}"
           echo "Latest: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO_NAME }}:latest"
           echo ""
-          echo "Next: check App Runner / ECS console for live URL"
-          echo "App Runner auto-deploys when ECR:latest is updated."
+          echo "Live endpoints:"
+          echo "  Health : http://$PUBLIC_IP:8000/health"
+          echo "  Swagger: http://$PUBLIC_IP:8000/docs"
+          echo "  Predict: http://$PUBLIC_IP:8000/predict"
+          echo "============================================="
