@@ -1,6 +1,4 @@
 [core]
     remote = origin
-['remote "local_storage"']
-    url = C:\Users\prash\OneDrive\2026\Training\K21Academy\MLOps\Module 2\MLOPS_Pune_Price_Prediction_Project\dvc_remote
 ['remote "origin"']
     url = https://dagshub.com/SHADRACK-NAKOBA/mlops-pune-price-prediction.dvc
