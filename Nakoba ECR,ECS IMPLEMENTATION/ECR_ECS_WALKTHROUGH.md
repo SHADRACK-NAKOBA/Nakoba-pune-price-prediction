@@ -961,29 +961,89 @@ use Amazon RDS PostgreSQL as the backend-store-uri instead (~$13/mo extra).
 
 ## Section 16 — GitHub Actions Auto-Deploy (final wiring)
 
-Add these secrets in GitHub → Settings → Secrets → Actions:
+### Issue encountered — Deploy job ECS step always skipped
+
+The original deploy job had:
+```yaml
+- name: Force new ECS deployment (if ECS_CLUSTER_NAME secret is set)
+  if: ${{ env.ECS_CLUSTER_NAME != '' }}
+  env:
+    ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
+```
+
+`env.ECS_CLUSTER_NAME` is only set **inside the step scope** — checking it
+in the `if:` condition (which runs before the step) always evaluates to empty.
+The ECS update step was silently skipped on every deploy run.
+
+### Fix — Reference secrets directly, remove conditional
+
+```yaml
+- name: Force new ECS deployment
+  run: |
+    aws ecs update-service \
+      --cluster ${{ secrets.ECS_CLUSTER_NAME }} \
+      --service ${{ secrets.ECS_SERVICE_NAME }} \
+      --force-new-deployment \
+      --region  ${{ secrets.AWS_REGION }}
+```
+
+Also added two new steps:
+- **Wait for stability** — `aws ecs wait services-stable` blocks the job until
+  the new task passes its health check (up to 5 min). Job fails if deploy fails.
+- **Live URL step** — queries the running task's public IP and prints
+  `/health`, `/docs`, `/predict` URLs directly in the Actions log.
+
+### Step 16a — Add the 6 required secrets
+
+Go to: **https://github.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction/settings/secrets/actions**
+
+Click **"New repository secret"** for each:
 
 | Secret | Value |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | From IAM → Prince → Security credentials |
-| `AWS_SECRET_ACCESS_KEY` | Same |
+| `AWS_ACCESS_KEY_ID` | IAM → Prince → Security credentials → Access key |
+| `AWS_SECRET_ACCESS_KEY` | Same page → Secret access key |
 | `AWS_REGION` | `us-east-1` |
 | `ECR_REPO_NAME` | `pune-price-prediction` |
 | `ECS_CLUSTER_NAME` | `pune-mlops` |
 | `ECS_SERVICE_NAME` | `pune-price-prediction` |
 
-Once all 6 secrets are set, go to:
-**https://github.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction/actions**
+### Step 16b — Trigger the deploy
+
+Go to:
+**https://github.com/SHADRACK-NAKOBA/Nakoba-pune-price-prediction/actions/workflows/ci.yml**
 
 Click **"Run workflow"** → **"Run workflow"** (green button).
 
-This triggers the full 4-job pipeline:
+Full pipeline that runs:
 ```
-lint → test → docker build + smoke test → deploy to ECR + ECS
+Job 1: Lint (ruff + black)
+    ↓
+Job 2: pytest (36 tests with coverage)
+    ↓
+Job 3: Docker build + smoke test (curl /health after 45s)
+    ↓
+Job 4: Deploy (ECR push → ECS update → wait stable → print live URL)
+```
+
+### What the deploy job logs show on success
+
+```
+=============================================
+DEPLOYMENT COMPLETE
+=============================================
+Image : 211125741068.dkr.ecr.us-east-1.amazonaws.com/pune-price-prediction:abc1234
+Latest: 211125741068.dkr.ecr.us-east-1.amazonaws.com/pune-price-prediction:latest
+
+Live endpoints:
+  Health : http://<IP>:8000/health
+  Swagger: http://<IP>:8000/docs
+  Predict: http://<IP>:8000/predict
+=============================================
 ```
 
 Every future `git push` to main runs lint + test + docker build automatically.
-Deploy to production requires clicking "Run workflow" manually (safety gate).
+Deploy to production requires clicking **"Run workflow"** manually (safety gate).
 
 ---
 
@@ -1004,9 +1064,9 @@ docker push "$ECR_URI`:latest"
 aws ecs update-service --cluster $CLUSTER --service $SERVICE `
   --force-new-deployment --region $REGION
 
-# Get current public IP
+# Get current public IP  (--desired-status RUNNING is required)
 $TASK_ARN = aws ecs list-tasks --cluster $CLUSTER --service-name $SERVICE `
-  --region $REGION --query "taskArns[0]" --output text
+  --region $REGION --desired-status RUNNING --query "taskArns[0]" --output text
 $ENI = aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN `
   --region $REGION `
   --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" `
@@ -1056,6 +1116,9 @@ aws ecs update-service --cluster $CLUSTER --service $SERVICE `
 | 8 | Task ARN empty, IP shows `None` (first time) | Task not yet started; script ran too early | `Start-Sleep -Seconds 90` before querying |
 | 9 | Task ARN empty even with `running: 1` | `list-tasks` without `--desired-status RUNNING` returns empty | Always add `--desired-status RUNNING` to `list-tasks` |
 | 10 | `/predict` returns wrong values (always 1.0) | Docker image built with stub model files | Copy real model files from `C:\Users\admin\mlops-pune-price-prediction\model\`, rebuild and push |
+| 11 | ECS update step always skipped in deploy job | `if: ${{ env.ECS_CLUSTER_NAME != '' }}` checks env scope set inside step — always empty at eval time | Reference `${{ secrets.ECS_CLUSTER_NAME }}` directly in `run:`, remove conditional |
+| 12 | Deploy job pushes image then exits — no confirmation it worked | No wait step; next task might be failing health checks silently | Added `aws ecs wait services-stable` — job blocks until healthy or fails loudly |
+| 13 | `pip` not found — `pyenv` not configured | System Python managed by pyenv with no version set | Use full venv path: `C:\Users\admin\Downloads\MLOps_Pune_Price_Prediction_Project\venv\Scripts\pip.exe` |
 
 ---
 
@@ -1072,12 +1135,18 @@ aws ecs update-service --cluster $CLUSTER --service $SERVICE `
 | `/docs` Swagger UI | ✅ Accessible |
 | `/predict` endpoint | ✅ Real model files deployed — returns actual predictions |
 | Real model files | ✅ Copied from `C:\Users\admin\mlops-pune-price-prediction\model\` |
-| MLflow dashboard | ❌ Not yet set up |
-| Stable HTTPS URL | ❌ Needs ALB + ACM + domain |
-| GitHub Actions auto-deploy | ❌ Needs 6 secrets added |
+| MLflow dashboard (local) | ✅ Runs via venv — `http://localhost:5000` |
+| MLflow dashboard (hosted) | ⬜ Optional — DagsHub Option B in Section 15 |
+| GitHub Actions CI (lint+test+build) | ✅ Passing on every push |
+| GitHub Actions deploy job | ✅ Fixed — ECS always updates, waits for stability, prints live URL |
+| GitHub Secrets (6 required) | ⬜ Add via GitHub → Settings → Secrets → Actions |
+| Stable HTTPS URL | ⬜ Optional — ALB + ACM + domain (Section 14) |
+| ECS Auto-scaling | ⬜ Optional — CPU-based 1→4 tasks (Section 14g) |
 
-**Priority order:**
-1. Find/retrain real model files → real predictions
-2. Add GitHub Secrets → auto-deploy works
-3. Set up DagsHub → hosted MLflow + DVC remote
-4. Add ALB + domain → stable HTTPS URL for real users
+**Remaining to activate full auto-deploy:**
+1. Add the 6 GitHub Secrets (Section 16a) → click "Run workflow" → fully automated
+
+**Optional next steps:**
+2. Set up DagsHub (Section 15B) → hosted MLflow + DVC remote + real models in CI
+3. Add ALB + domain (Section 14) → stable HTTPS URL for real users
+4. Enable ECS auto-scaling (Section 14g) → handles traffic spikes
